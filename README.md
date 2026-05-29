@@ -398,3 +398,12 @@ Everything else — collections, payloads, search logic — remains identical.
 ## License
 
 MIT — free to use, modify, and distribute.
+
+---
+
+## Author
+
+**Zeineb Ghrab**  
+Data & Decisional Systems Engineering Student 
+
+---
