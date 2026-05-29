@@ -397,7 +397,12 @@ Everything else — collections, payloads, search logic — remains identical.
 
 ## License
 
-MIT — free to use, modify, and distribute.
+MIT License © Zeineb Ghrab — free to use, modify, and distribute.
+
+---
+
+## Contributions
+Pull requests are welcome! For major changes, please open an issue first.
 
 ---
 
@@ -405,5 +410,3 @@ MIT — free to use, modify, and distribute.
 
 **Zeineb Ghrab**  
 Data & Decisional Systems Engineering Student 
-
----
