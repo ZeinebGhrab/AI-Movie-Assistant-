@@ -410,3 +410,9 @@ Pull requests are welcome! For major changes, please open an issue first.
 
 **Zeineb Ghrab**  
 Data & Decisional Systems Engineering Student 
+
+---
+
+Last Updated: 29/05/2026  
+Status: Active ✓  
+Maturity Level: Prototype / Research Implementation (Not Production Ready)
