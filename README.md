@@ -413,6 +413,6 @@ Data & Decisional Systems Engineering Student
 
 ---
 
-Last Updated: 29/05/2026  
-Status: Active ✓  
-Maturity Level: Prototype / Research Implementation (Not Production Ready)
+*Last Updated: 29/05/2026*  
+*Status: Active ✓*  
+*Maturity Level: Prototype / Research Implementation (Not Production Ready)*
