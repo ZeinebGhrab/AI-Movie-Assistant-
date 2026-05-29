@@ -85,7 +85,7 @@ class CollaborativeRecommender:
             self._user_embeddings[user_id] = user_vec
             user_ids.append(user_id)
             user_vecs.append(user_vec)
-            user_payloads.append({"user_id": user_id})
+            user_payloads.append({"user_id": int(user_id)})
 
         # --- Index user vectors in Qdrant ---
         self.user_store = VectorStore(

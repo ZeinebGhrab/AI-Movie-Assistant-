@@ -10,7 +10,6 @@ Requires Qdrant running via Docker:
     docker compose up -d
 """
 
-import uuid
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -22,6 +21,13 @@ from qdrant_client.models import (
     MatchValue,
     ScoredPoint,
 )
+
+
+def _to_native(value):
+    """Convert numpy scalars to native Python types for JSON serialisation."""
+    if hasattr(value, 'item'):      # covers numpy.int64, numpy.float32, etc.
+        return value.item()
+    return value
 
 
 class VectorStore:
@@ -71,7 +77,6 @@ class VectorStore:
             print(f"[VectorStore] Created collection '{collection_name}' (dim={dim})")
         else:
             print(f"[VectorStore] Using existing collection '{collection_name}'")
-            # Rebuild id maps from stored payloads
             self._rebuild_maps()
 
     # ------------------------------------------------------------------
@@ -79,12 +84,14 @@ class VectorStore:
     # ------------------------------------------------------------------
 
     def _to_uint(self, item_id) -> int:
-        """Map any item_id to a stable positive integer for Qdrant."""
+        """Map any item_id to a stable positive integer for Qdrant.
+        Always returns a native Python int — never numpy.int64."""
+        item_id = _to_native(item_id)
         if item_id not in self._id_map:
             uid = len(self._id_map) + 1
             self._id_map[item_id] = uid
             self._reverse_map[uid] = item_id
-        return self._id_map[item_id]
+        return int(self._id_map[item_id])
 
     def _rebuild_maps(self):
         """Re-populate id maps from Qdrant payload on startup."""
@@ -111,6 +118,7 @@ class VectorStore:
 
     def add(self, item_id, vector: np.ndarray, payload: dict = None) -> None:
         """Upsert a single vector into the collection."""
+        item_id = _to_native(item_id)
         uid = self._to_uint(item_id)
         base_payload = {"item_id": item_id}
         if payload:
@@ -141,8 +149,9 @@ class VectorStore:
             end = min(start + batch_size, n)
             points = []
             for i in range(start, end):
-                uid = self._to_uint(item_ids[i])
-                base_payload = {"item_id": item_ids[i]}
+                native_id = _to_native(item_ids[i])   # numpy.int64 → int
+                uid = self._to_uint(native_id)
+                base_payload = {"item_id": native_id}
                 if payloads:
                     base_payload.update(payloads[i])
                 points.append(
