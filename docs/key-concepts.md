@@ -512,3 +512,197 @@ python utils/evaluator.py
 | Collaborative filtering | `CollaborativeRecommender` | `models/collaborative.py` |
 | Hybrid blending (α-weighting) | `HybridRecommender` | `models/hybrid.py` |
 | Precision@K / Recall@K / NDCG@K | `evaluate()` function | `utils/evaluator.py` |
+
+---
+
+## 13. Evaluating and Tuning Vector Search Performance (Lesson 6)
+
+### Overview
+
+Lesson 6 extends the offline accuracy metrics from [Section 12](#12-evaluation-metrics--precision-recall-ndcg) with **speed and throughput dimensions**. A recommender that scores perfectly on NDCG@5 but takes 2 seconds per query is not production-ready. This section maps every metric and tuning concept from Lesson 6 to concrete code in `utils/performance_evaluator.py` and `utils/tuner.py`.
+
+---
+
+### Metrics added in Lesson 6
+
+#### Query Latency
+
+Time (in milliseconds) for Qdrant to execute one similarity search and return results.
+
+```
+Lesson 6: "Query latency is typically measured in milliseconds or seconds.
+Low query latency is crucial for interactive applications."
+```
+
+Three latency percentiles are reported by `PerformanceEvaluator.benchmark()`:
+
+| Percentile | What it tells you |
+|---|---|
+| `latency_mean_ms` | Average cost per query |
+| `latency_p50_ms` | Typical (median) query — unaffected by outliers |
+| `latency_p95_ms` | Worst 5% of queries — what most users will experience at worst |
+| `latency_p99_ms` | Tail latency — relevant for SLA guarantees |
+
+```python
+# utils/performance_evaluator.py — benchmark()
+t0 = time.perf_counter()
+results = self.store.search(query_vec, top_k=top_k, filter_payload=filter_payload)
+t1 = time.perf_counter()
+latencies_ms.append((t1 - t0) * 1_000)
+```
+
+#### QPS — Queries Per Second
+
+```
+Lesson 6: "QPS measures the number of search queries the vector database
+can handle per second. High QPS is essential for handling a large number
+of concurrent search queries."
+```
+
+Computed from the total time across all queries:
+
+```python
+total_time_s = sum(latencies_ms) / 1_000
+qps = len(query_vectors) / total_time_s
+```
+
+#### Recall@K (speed-aware)
+
+Same formula as Section 12, but now measured *within* the timed loop so the accuracy/latency tradeoff is visible side-by-side:
+
+```
+Recall@K = hits_in_top_k / total_relevant_items
+```
+
+#### Precision@K and F1-Score
+
+```
+Lesson 6: "Precision = (Number of relevant results retrieved) /
+           (Total number of results retrieved).
+           F1-Score = 2 × (Precision × Recall) / (Precision + Recall)"
+```
+
+F1 is added in `performance_evaluator.py` (not in the original `evaluator.py`) because Lesson 6 explicitly covers it as a balanced metric for fraud detection and support chatbots — cases where both false positives and false negatives matter.
+
+```python
+# utils/performance_evaluator.py
+def f1_at_k(recommended, relevant, k):
+    p = precision_at_k(recommended, relevant, k)
+    r = recall_at_k(recommended, relevant, k)
+    if p + r == 0:
+        return 0.0
+    return 2 * p * r / (p + r)
+```
+
+---
+
+### Tuning techniques
+
+#### 1. HNSW efSearch sweep (`utils/tuner.py` — `HNSWTuner`)
+
+```
+Lesson 6: "efSearch — Controls the search effort during query time.
+Higher values of efSearch improve recall but also increase query latency."
+```
+
+`HNSWTuner.sweep()` sends Qdrant the `SearchParams(hnsw_ef=ef)` flag for each value in `ef_values`, measuring recall and latency at each setting:
+
+```python
+# utils/tuner.py — HNSWTuner.sweep()
+from qdrant_client.models import SearchParams
+
+raw = self.store.client.search(
+    collection_name=self.store.collection_name,
+    query_vector=vec.astype(np.float32).tolist(),
+    limit=top_k,
+    search_params=SearchParams(hnsw_ef=ef, exact=False),
+)
+```
+
+Expected output pattern:
+
+| ef | Recall | Latency mean |
+|---|---|---|
+| 32 | lower | faster |
+| 128 | higher | moderate |
+| 512 | near-ceiling | slower |
+
+The tuner prints a recommendation: the smallest ef that reaches 98 % of maximum recall.
+
+#### 2. Top-K sweep (`TopKTuner`)
+
+```
+Lesson 6: "As K increases, Recall increases while Precision decreases —
+the classic Precision–Recall tradeoff."
+```
+
+`TopKTuner.sweep()` runs all user-profile queries at each `k` in `k_values` and prints the full tradeoff table:
+
+```python
+topk_tuner = TopKTuner(cb.store, gt_fn)
+results = topk_tuner.sweep(query_vectors, k_values=[1, 3, 5, 10])
+TopKTuner.print_table(results)
+```
+
+As K grows, Recall rises (more candidates returned, more relevant items found) while Precision falls (a larger fraction of returned items are irrelevant). The table makes this tradeoff explicit so the developer can choose K based on a latency budget.
+
+#### 3. Filter overhead profiler (`FilterOverheadProfiler`)
+
+```
+Lesson 6: "Efficient filtering can significantly improve search performance
+by reducing the number of vectors that need to be compared."
+```
+
+`FilterOverheadProfiler.profile()` runs both unfiltered and filtered searches on the same query vectors and computes overhead as:
+
+```
+overhead_ms  = filtered_mean_ms − unfiltered_mean_ms
+overhead_pct = overhead_ms / unfiltered_mean_ms × 100
+```
+
+An overhead below 20 % is reported as "acceptable". Above that, the profiler recommends **indexing the payload field** in Qdrant to speed up filtering.
+
+```python
+# utils/tuner.py — FilterOverheadProfiler.print_result()
+status = "acceptable" if pct < 20 else "high — consider indexing this field"
+```
+
+---
+
+### Warm-up queries
+
+Both `PerformanceEvaluator` and the tuners discard the first `n_warmup` queries from timing. This is required because Qdrant's HNSW graph and OS page-cache are cold on the first few accesses, producing artificially high latency that would skew benchmarks.
+
+```
+Lesson 6: "Monitoring tools allow you to track key performance metrics
+such as query latency, QPS, CPU usage, and memory usage."
+```
+
+---
+
+### Running the new tools
+
+```bash
+# Full performance benchmark across top_k = 1, 5, 10
+python utils/performance_evaluator.py --seed --top_k_values 1 5 10
+
+# HNSW efSearch sweep + top-K sweep + filter overhead
+python utils/tuner.py --seed --genre_filter sci-fi
+```
+
+---
+
+### Summary Table — Lesson 6 concepts → code
+
+| Lesson 6 concept | Code location | Key symbol |
+|---|---|---|
+| Query latency (mean / P95 / P99) | `utils/performance_evaluator.py` — `benchmark()` | `latency_mean_ms`, `latency_p95_ms` |
+| QPS | `utils/performance_evaluator.py` — `benchmark()` | `qps` |
+| Recall@K (speed-aware) | `utils/performance_evaluator.py` — `recall_at_k()` | `recall_mean` |
+| Precision@K | `utils/performance_evaluator.py` — `precision_at_k()` | `precision_mean` |
+| F1-Score | `utils/performance_evaluator.py` — `f1_at_k()` | `f1_mean` |
+| NDCG@K | `utils/performance_evaluator.py` — `ndcg_at_k()` | `ndcg_mean` |
+| HNSW efSearch tuning | `utils/tuner.py` — `HNSWTuner` | `SearchParams(hnsw_ef=ef)` |
+| Top-K precision/recall tradeoff | `utils/tuner.py` — `TopKTuner` | `k_values` sweep |
+| Filter overhead profiling | `utils/tuner.py` — `FilterOverheadProfiler` | `overhead_pct` |
+| Warm-up queries | Both files | `n_warmup` parameter |
