@@ -19,8 +19,9 @@ class EmbeddingGenerator:
         Name of the pre-trained SentenceTransformer model.
         Default: 'all-MiniLM-L6-v2' — good speed/accuracy trade-off (dim=384).
     """
-
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"): 
+        # all-MiniLM-L6-v2 : it allows you to transform text into embeddings 
         print(f"[EmbeddingGenerator] Loading model: {model_name}")
         self.model = SentenceTransformer(model_name)
         self.dim = self.model.get_sentence_embedding_dimension()
