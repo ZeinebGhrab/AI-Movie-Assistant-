@@ -1,4 +1,4 @@
-# 🎬 VecRecSys — Vector-Powered Recommendation System
+# 🎬 AI Movie Assistant — Intelligent recommendations powered by AI
 
 > A full-stack movie recommendation system backed by **Qdrant** (vector database) and **MongoDB** (data layer).
 > It implements three complementary approaches — Content-Based Filtering, Collaborative Filtering, and a Hybrid α-blending method — exposed through a **FastAPI** backend and a **React** dashboard.
