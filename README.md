@@ -534,6 +534,6 @@ MIT License © Zeineb Ghrab — free to use, modify, and distribute.
 
 ---
 
-*Last Updated: 06/06/2026*
-*Status: Active ✓*
+*Last Updated: 06/06/2026* <br/>
+*Status: Active ✓* <br/>
 *Maturity Level: Prototype / Research Implementation (Not Production Ready)*
