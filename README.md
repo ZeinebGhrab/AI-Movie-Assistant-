@@ -530,7 +530,7 @@ MIT License © Zeineb Ghrab — free to use, modify, and distribute.
 ## Author
 
 **Zeineb Ghrab**
-Data & Decisional Systems Engineering Student — ENET'Com
+*Data & Decisional Systems Engineering Student — ENET'Com*
 
 ---
 
